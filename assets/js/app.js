@@ -563,6 +563,7 @@
       if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = "Placing order…"; }
 
       submitOrder(order).then(function (res) {
+        res.order.emailed = res.emailed;
         write(CFG.storage.lastOrder, res.order);
         var all = read(CFG.storage.orders, []); all.unshift(res.order); write(CFG.storage.orders, all.slice(0, 40));
         if (!buynow) setCart([]);
@@ -582,16 +583,43 @@
     return "BB" + ymd + rnd;
   }
 
-  /* --- Order service abstraction -----------------------------------------
-     No backend is configured for this storefront, so orders are persisted
-     locally in the browser (isolated development mode). To integrate a real
-     backend, replace the body of submitOrder() with a fetch() to your order
-     API and keep the same resolved shape: { order: <order object> }.
+  /* --- Order service ------------------------------------------------------
+     Every order is emailed to the business inbox (CFG.order.email) through a
+     zero-signup form-to-email relay — no server, no account. The customer's
+     browser sends it, so it works on static hosting.
+     To move to a real backend later, replace the body of submitOrder() with a
+     fetch() to your order API and keep the resolved shape { order }.
   ------------------------------------------------------------------------ */
   function submitOrder(order) {
-    // --- INTEGRATION POINT -------------------------------------------------
-    // e.g. return fetch("/api/orders", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(order)}).then(r=>r.json()).then(d=>({order:d.order||order}));
-    return new Promise(function (resolve) { setTimeout(function () { resolve({ order: order }); }, 450); });
+    var url = (CFG.order && CFG.order.emailEndpoint) || "";
+    var lines = order.items.map(function (it) {
+      return it.name + (it.variantLabel ? " (" + it.variantLabel + ")" : "") + " x" + it.qty + " = " + money(it.price * it.qty);
+    }).join("  |  ");
+    var payload = {
+      _subject: "New BUBBLO Order " + order.id + " — COD " + money(order.total),
+      _template: "table",
+      _captcha: "false",
+      "Order ID": order.id,
+      "Payment": "Cash On Delivery",
+      "Total": money(order.total),
+      "Customer name": order.customer.name,
+      "Mobile": order.customer.mobileDisplay + " (" + order.customer.mobile + ")",
+      "Customer email": order.customer.email || "-",
+      "Address": order.customer.address,
+      "Landmark": order.customer.landmark,
+      "Pincode": order.customer.pincode,
+      "City": order.customer.city,
+      "State": order.customer.state,
+      "Items": lines
+    };
+    if (!url) { return Promise.resolve({ order: order, emailed: false }); }
+    return fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Accept": "application/json" },
+      body: JSON.stringify(payload)
+    }).then(function (r) { return r.json().catch(function () { return {}; }); })
+      .then(function () { return { order: order, emailed: true }; })
+      .catch(function () { return { order: order, emailed: false }; });
   }
   function lookupOrder(orderId, mobileDigits) {
     var all = read(CFG.storage.orders, []);
@@ -625,6 +653,21 @@
       if (PREVIEW) { window.__BUBBLO_TRACK = { order: order.id, mobile: mob }; track.href = "#/track-order/"; }
       else { track.href = "../track-order/?order=" + encodeURIComponent(order.id) + "&mobile=" + encodeURIComponent(mob); }
     }
+    // WhatsApp copy of the order (guaranteed delivery to the business)
+    var waBtn = $(".js-wa-order");
+    if (waBtn) {
+      var msg = "Hi BUBBLO 👋 I just placed an order.\n" +
+        "Order ID: " + order.id + "\n" +
+        "Payment: Cash On Delivery\n" +
+        "Total: " + money(order.total) + "\n" +
+        "Name: " + order.customer.name + "\n" +
+        "Mobile: " + order.customer.mobileDisplay + "\n" +
+        "Address: " + order.customer.address + ", " + order.customer.landmark + ", " + order.customer.city + ", " + order.customer.state + " - " + order.customer.pincode + "\n" +
+        "Items: " + order.items.map(function (it) { return it.name + (it.variantLabel ? " (" + it.variantLabel + ")" : "") + " x" + it.qty; }).join(", ");
+      waBtn.href = waUrl(msg);
+    }
+    var note = $(".js-order-note");
+    if (note) note.textContent = order.emailed ? "A copy of your order has been sent to BUBBLO." : "Tap below to send your order to BUBBLO on WhatsApp.";
   }
 
   /* ------------------------------ tracking ------------------------------- */

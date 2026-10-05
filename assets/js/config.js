@@ -25,6 +25,19 @@ window.BUBBLO_CONFIG = {
   /* --- Payment ----------------------------------------------------------- */
   payment: { method: "COD", label: "Cash On Delivery", onlineEnabled: false },
 
+  /* --- Order delivery ----------------------------------------------------
+     Every order is emailed to the business inbox below, with no signup or
+     server. `emailEndpoint` is a form-to-email relay (FormSubmit).
+     IMPORTANT: the very first order sends an activation email to `email` —
+     click "Activate" in it once, and every order after that is delivered
+     automatically. To send orders elsewhere, change `email` AND the address
+     inside `emailEndpoint`.
+  ------------------------------------------------------------------------ */
+  order: {
+    email: "mrvickybusines@gmail.com",
+    emailEndpoint: "https://formsubmit.co/ajax/mrvickybusines@gmail.com"
+  },
+
   /* --- Campaign ----------------------------------------------------------
      "BUBBLE MEGA DAYS" / "LIMITED TIME BUBBLE DROP".
      CAMPAIGN_END is the ONE configurable campaign end timestamp. It is a fixed
